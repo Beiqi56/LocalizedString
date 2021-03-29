@@ -11,6 +11,7 @@ let RootDirKey = "rootDir"
 let OutputDirKey = "outputDir"
 let LanguageKey = "lproj"
 let TranslatedDirKey = "translatedDir"
+let FileNamesKey = "fileNames"
 
 let ActionKey = "1"
 enum ActionValue: String, CaseIterable {
@@ -19,6 +20,7 @@ enum ActionValue: String, CaseIterable {
     case collectLocalizedString
     case collectCodeString
     case makeCodeLocalized
+    case copyFiles
 }
 
 public func printShellHelp() {
@@ -27,7 +29,8 @@ usage: {action} # \(ActionValue.allCases.map({ $0.rawValue }).joined(separator: 
     [--\(RootDirKey) value]  # default value = current cmd directory, support short key
     [--\(OutputDirKey) value]  # default value = rootDir.parent directory, support short key
     [--\(LanguageKey) value]  # default value will be all languages in \(RootDirKey), support short key
-    [--\(TranslatedDirKey)] value  # translated file will be all contents in this dir. support short key, required for \(ActionValue.replaceLocalizedString.rawValue) action, otherwise will be ignored.
+    [--\(TranslatedDirKey) value]  # translated file will be all contents in this dir. support short key, required for \(ActionValue.replaceLocalizedString.rawValue) action, otherwise will be ignored.
+    [--\(FileNamesKey) value]  # files to copy/overwrite to \(OutputDirKey) with same sub directory.
 """)
 }
 
@@ -66,6 +69,14 @@ public func runShell() {
         
     case .makeCodeLocalized:
         makeCodeLocalized(rootDir: rootDir)
+        
+    case .copyFiles:
+        guard rootDir != outputDir else { print("same output directory ..."); return }
+        guard let files = cmdParams.paramValue(forKey: FileNamesKey), !files.isEmpty else {
+            print("not found \(FileNamesKey) ..."); return
+        }
+        let names = files.split(separator: ",").map { String($0) }
+        copyFiles(fill: names.equalNames, from: rootDir, to: outputDir)
     }
 }
 
@@ -182,4 +193,25 @@ func test(rootDir: String) {
         .fill(dirs: ["lproj"].hasExts)
         .ignoreNotCodeDirs()
         .startToEnumerate(atPath: rootDir)
+}
+
+
+public func copyFiles(fill blk: @escaping FileIteratorWrapper.ConditionBlk, from rootDir: String, to outputDir: String) {
+    let fileMng = FileManager.default
+    let filter = FileIteratorWrapper { (enm, file, isDir) in
+        guard !isDir else { return }
+        let out = outputDir.appendingFileName(file)
+        do {
+            if fileMng.fileExists(atPath: out) {
+                try fileMng.removeItem(atPath: out)
+            } else if !fileMng.createDirectory(out.parentDirectory) {
+                return
+            }
+            try fileMng.copyItem(atPath: rootDir.appendingFileName(file), toPath: out)
+        } catch {
+            print("failed to copy file: \(file)")
+            print("\(error)")
+        }
+    }
+    filter.fill(files: blk).startToEnumerate(atPath: rootDir)
 }

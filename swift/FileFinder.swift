@@ -106,6 +106,20 @@ public extension FileManager {
             operation(enumerator, item, isDir)
         }
     }
+    
+    func createDirectory(_ path: String) -> Bool {
+        var isDir: ObjCBool = false
+        if fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue { return true }
+        var created = true
+        do {
+            try createDirectory(atPath: path, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            print("failed to create path: \(path)")
+            print("\(error)")
+            created = false
+        }
+        return created
+    }
 }
 
 
